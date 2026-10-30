@@ -266,7 +266,6 @@ describe("proposal-bound workflow authority", () => {
   it.each([
     { repository_id: "9" },
     { repository: "attacker/site" },
-    { workflow_sha: "e".repeat(40) },
     { workflow_ref: "owner/site/.github/workflows/other.yml@refs/heads/main" },
     { event_name: "pull_request" },
     { actor_id: "99" },
@@ -277,6 +276,27 @@ describe("proposal-bound workflow authority", () => {
     await expect(
       verifyAuthorization(env, s.handoff, { ...identity, ...change }),
     ).rejects.toThrow();
+  });
+  it("allows advanced default branches while retaining the authorized source and exact heads", async () => {
+    const s = await setup();
+    const currentWebsite = "e".repeat(40);
+    const currentMetadata = "f".repeat(40);
+    s.pull.mockImplementation(async (repo) =>
+      repo === "owner/site"
+        ? draft(repo, head, "curation/site", currentWebsite)
+        : draft(repo, metaHead, "curation/metadata", currentMetadata),
+    );
+    await expect(
+      workflowAccess(
+        env,
+        { ...identity, workflow_sha: currentWebsite },
+        request,
+        s.auth,
+      ),
+    ).resolves.toMatchObject({ token: "scoped-test-token" });
+    await expect(
+      workflowAccess(env, identity, request, s.auth),
+    ).rejects.toThrow("current trusted default branch");
   });
   it("rejects modified bundle coordinates and forged grants", async () => {
     const s = await setup();

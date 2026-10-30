@@ -142,7 +142,6 @@ export async function verifyAuthorization(
     grant.digest !== (await sha256Base64url(JSON.stringify(unsigned))) ||
     identity.repository !== grant.repository ||
     identity.repository_id !== grant.repository_id ||
-    identity.workflow_sha !== grant.trusted_sha ||
     (canonicalRead
       ? identity.event_name !== "workflow_dispatch"
       : identity.event_name !== "pull_request_target" ||
@@ -378,10 +377,8 @@ export async function workflowAccess(
       await website.pullRequest(request.repository, request.pull_request),
     );
     requireDraft(pull, request.repository, request.head, String(grant.branch));
-    if (pull.base.sha !== grant.trusted_sha)
-      deny(
-        "The trusted default branch changed; submit again from the current deployment.",
-      );
+    if (pull.base.sha !== identity.workflow_sha)
+      deny("The workflow is not running the current trusted default branch.");
     await handoffCommit(
       website,
       request.repository,
@@ -423,7 +420,7 @@ export async function workflowAccess(
       run.event !==
         (canonicalRead ? "workflow_dispatch" : "pull_request_target") ||
       run.path !== WORKFLOW ||
-      run.head_sha !== (canonicalRead ? grant.trusted_sha : request.head) ||
+      run.head_sha !== (canonicalRead ? identity.workflow_sha : request.head) ||
       run.run_attempt !== 1 ||
       (!canonicalRead && run.actor?.id !== grant.curator_id) ||
       run.status !== "in_progress"
@@ -484,8 +481,6 @@ export async function workflowAccess(
         grant,
         false,
       );
-    if (metaPull.base.sha !== metadata.source_commit)
-      deny("The metadata default branch changed.");
     await github.requireCurator(
       metadata.repository,
       String(grant.curator_login),
